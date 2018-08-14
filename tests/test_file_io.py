@@ -1,10 +1,10 @@
 import unittest
 import numpy as np  # noqa
 import sys
-sys.path.append('./..')
-import file_io    # noqa
+import KB_python.file_io as file_io
 
 file_prefix = './test_ref_data/file_io'
+
 
 # ----------------------------------------------
 # io tests
@@ -48,6 +48,15 @@ class test_load_xvg(unittest.TestCase):
 
     def test_xvg_column_mismatch_error(self):
         self.assertRaises(ValueError, file_io.load_xvg, file_prefix + '/data_1D.xvg', dims=3)
+
+
+class test_load_gromacs_index(unittest.TestCase):
+    def test_load_index(self):
+        indices = file_io.load_gromacs_index('test_ref_data/file_io/gromacs_index.ndx')
+        self.assertEqual(indices['data1'], [0, 1, 2] )   # index is one less than found in index file
+        self.assertEqual(indices['data2'], [3, 4, 5, 6, 7, 8])
+        self.assertEqual(indices['data3'], [9])
+        self.assertNotIn( 'data4', indices.keys())   # data4 is empty, don't make a key
 
 
 if __name__ == '__main__':

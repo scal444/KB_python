@@ -26,3 +26,36 @@ def load_xvg(file, comments=('#', '@'), dims=3, return_time_data=False):
         return return_data, times
     else:
         return return_data
+
+
+def load_gromacs_index(index_file):
+    ''' Loads a gromacs style index file. Decrements all read indices by 1, as numbering starts at 1 in the files, but
+        we'll be using these as array indices
+
+        Parameters -
+            index_file - path to a file
+        Returns -
+            index_dict - dictionary of index string : list of integer values
+    '''
+    with open(index_file, 'r') as fin:
+        index_dict = {}
+        curr_group = []
+        curr_nums = []
+        for line in fin:
+
+            # check for opening and closing brackets
+            if "[" in line and "]" in line:
+
+                # add previous to dictionary only if one existed before - accounts for initial case
+                if curr_group:
+                    index_dict[curr_group] = curr_nums
+
+                # reset group and index count
+                curr_group = line.split("[", 1)[-1].split("]", 1)[0].strip()
+                curr_nums = []
+            elif curr_group:
+                curr_nums += [int(i) - 1 for i in line.split()]    # decrement each one
+        # one last time
+        if curr_nums:
+            index_dict[curr_group] = curr_nums
+    return index_dict
