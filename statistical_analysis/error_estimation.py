@@ -3,7 +3,7 @@ from statsmodels.tsa.stattools import acf
 import matplotlib.pyplot as plt
 
 '''
-    Utilities for automated checking of single dimensional data sets for error convergence.
+    Utilities for automated checking of data sets for error convergence.
 
     Block averaging is used to estimate error of a time course. At a long enough block length, blocks become
     decorrelated and can be used to estimate standard error. However, with insufficient sampling there may be too few
