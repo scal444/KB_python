@@ -1,6 +1,19 @@
 import numpy as np
 
 
+def xvg_2_coords(xvg_input, dims, return_time_data=False):
+    '''
+        Processes a numpy array of xvg data into mdtraj style formatting. Strips first column (time usually)
+        optionally returns it
+    '''
+    reshaped_data = xvg_input[:, 1:].reshape(xvg_input.shape[0], int((xvg_input.shape[1] - 1) / dims), dims)
+    if return_time_data:
+        times = xvg_input[:, 0]
+        return reshaped_data, times
+    else:
+        return reshaped_data
+
+
 def load_xvg(file, comments=('#', '@'), dims=3, return_time_data=False):
     ''' Loads an xvg file, created from gromacs. For a typical gromacs-derived xvg giving information on
         n particles with m dimensions to the data, the format is c1=time, c2 to c2 + m = data on first particle, and
@@ -20,12 +33,46 @@ def load_xvg(file, comments=('#', '@'), dims=3, return_time_data=False):
     if (data.shape[1] - 1) % dims > 0:
         raise ValueError("(dims * n_particles) + 1 does not equal number of columns in xvg")
 
-    return_data = data[:, 1:].reshape(data.shape[0], int((data.shape[1] - 1) / dims), dims)
-    if return_time_data:
-        times = data[:, 0]
-        return return_data, times
+    return xvg_2_coords(data, dims, return_time_data=return_time_data)
+
+
+def load_large_text_file(file, delimiter=' ', verbose=True, dtype=float, comments=('@', '#')):
+    '''
+        Numpy.loadtxt has some memory problems on large files. This function will likely be slow but is more memory
+        efficient. Loops through file twice - once to get dimensions, another to load array
+    '''
+    n_columns = 0
+    n_rows    = 0
+    with open(file, 'r') as fin:
+        if verbose:
+            print("opening file for initial read")
+        for line in fin:
+            # skip comment line
+            if not line[0] in comments and line.strip():
+                # if first data row, get dimensions
+                if not n_rows:
+                    n_columns = np.fromstring(line, sep=delimiter).size
+                n_rows += 1
+
+    if not n_columns or not n_rows:
+        raise Exception("file error - file contained {} rows and {} columns".format(n_rows, n_columns))
     else:
-        return return_data
+        output = np.zeros((n_rows, n_columns), dtype=dtype)
+        row = 0
+        with open(file, 'r') as fin:
+            if verbose:
+                print("opening file for assignment read - nrows = {}, ncolumns = {}".format(n_rows, n_columns))
+            for line in fin:
+                if not line[0] in comments and line.strip():
+                    line_array = np.fromstring(line, sep=delimiter, dtype=dtype)
+                    if line_array.size == n_columns:
+                        output[row] = line_array
+                        row += 1
+                    else:
+                        print(line[:80])
+                        raise Exception("Data inconsistency at row {}, expected {} columns, got {}".format(row,
+                                        n_columns, line_array.size ))
+    return output
 
 
 def load_gromacs_index(index_file):

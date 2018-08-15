@@ -1,6 +1,5 @@
 import unittest
 import numpy as np  # noqa
-import sys
 import KB_python.file_io as file_io
 
 file_prefix = './test_ref_data/file_io'
@@ -49,6 +48,28 @@ class test_load_xvg(unittest.TestCase):
     def test_xvg_column_mismatch_error(self):
         self.assertRaises(ValueError, file_io.load_xvg, file_prefix + '/data_1D.xvg', dims=3)
 
+
+class test_load_large_text_file(unittest.TestCase):
+    def test_loads_data(self):
+        data = file_io.load_large_text_file(file_prefix + '/fake_3D_data.xvg', verbose=False)
+        self.assertEqual(data[1, 3], 9)
+        self.assertEqual(data.shape, (3, 7))
+
+    def test_raises_mismatch_error(self):
+        self.assertRaises(Exception, file_io.load_large_text_file, file_prefix + '/data_missing_columns.xvg')
+
+    def test_ignores_trailing_whitespace(self):
+        data = file_io.load_large_text_file(file_prefix + '/data_trailing_whitespace.xvg', verbose=False)
+        self.assertEqual(data.shape, (3, 7))
+
+    def test_dtype_coercion(self):
+        pass
+
+    def test_loads_float_data(self):
+        pass
+
+    def test_ignores_comments(self):
+        pass
 
 class test_load_gromacs_index(unittest.TestCase):
     def test_load_index(self):
