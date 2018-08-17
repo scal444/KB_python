@@ -62,14 +62,6 @@ class test_load_large_text_file(unittest.TestCase):
         data = file_io.load_large_text_file(file_prefix + '/data_trailing_whitespace.xvg', verbose=False)
         self.assertEqual(data.shape, (3, 7))
 
-    def test_dtype_coercion(self):
-        pass
-
-    def test_loads_float_data(self):
-        pass
-
-    def test_ignores_comments(self):
-        pass
 
 class test_load_gromacs_index(unittest.TestCase):
     def test_load_index(self):
