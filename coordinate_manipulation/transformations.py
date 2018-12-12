@@ -14,7 +14,7 @@ def cart2pol(cart_coords):
     '''
 
     # input validation
-    #if len(cart_coords.shape) is not 2 or cart_coords.shape[1] is not 3:
+    # if len(cart_coords.shape) is not 2 or cart_coords.shape[1] is not 3:
     #    raise ValueError("dimension mismatch, expected (n_particles * 3), got {}".format(cart_coords.shape))
     if len(cart_coords.shape) == 2:
         x, y, z = cart_coords[:, 0], cart_coords[:, 1], cart_coords[:, 2]
