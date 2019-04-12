@@ -1,5 +1,6 @@
 import numpy as np
 from statsmodels.tsa.stattools import acf
+from pymbar.timeseries import detectEquilibration
 import matplotlib.pyplot as plt
 
 '''
@@ -12,6 +13,77 @@ import matplotlib.pyplot as plt
     noise that you can't be confident your error has converged.
 '''
 
+
+class Data_quality:
+
+    def __init__(self, data, identifiers=None):
+        self.data = data
+        self.identifiers = identifiers
+        self.block_average_profiles = []
+        self.n_samples_effective = []
+        self.fract_of_series_used = []
+        self.t0 = []
+
+    def plot_data_with_t0(self):
+        plt.figure()
+
+        for i, series in enumerate(self.data):
+            series_copy = np.array(series)
+            series_copy -= series.mean()
+            series_copy = 0.4 * series_copy /  np.max(np.abs(series_copy))
+            series_copy += i
+            t0 = self.t0[i]
+            plt.plot(np.arange(t0), series_copy[:t0] , c='r')
+            plt.plot(np.arange(t0, series_copy.size), series_copy[t0:], c='b')
+        plt.xlabel("time points")
+        plt.ylabel("normalized series")
+        plt.show()
+
+    def plot_only_equilibrated_data(self):
+        plt.figure()
+
+        for i, series in enumerate(self.data):
+            series_copy = np.array(series)
+            series_copy -= series.mean()
+            series_copy = 0.4 * series_copy /  np.max(np.abs(series_copy))
+            series_copy += i
+            plt.plot(series_copy[self.t0[i]:], c='b')
+        plt.xlabel("time points")
+        plt.ylabel("normalized series")
+        plt.show()
+
+    def plot_t0(self):
+        plt.figure()
+        plt.plot(self.t0)
+        plt.show()
+
+    def plot_neff(self):
+        plt.figure()
+        plt.plot(self.n_samples_effective)
+        plt.show()
+
+    def plot_block_averages(self, firstframe=0):
+
+        plt.figure()
+        for i in self.block_average_profiles:
+            plt.plot(i[firstframe:])
+        plt.show()
+
+    def get_reasonable_first_frame(self, plot=False, cutoff=0.75):
+        cutoff_mask = np.array(self.fract_of_series_used) > cutoff
+        return np.array(self.t0)[cutoff_mask].mean()
+
+    def plot_average_BA(self):
+        max = 0
+        for i in self.block_average_profiles:
+            max = np.max((len(i), max))
+        average = np.zeros(max)
+        counts = np.zeros(max)
+        for i in self.block_average_profiles:
+            average[:len(i)] += np.array(i)
+            counts[:len(i)] += 1
+        average /= counts
+        plt.plot(average)
 
 def block_average(data, blocksize, partial_block_cutoff_size=0.5):
     '''
@@ -63,7 +135,7 @@ def block_average_range(data, block_range, partial_block_cutoff_size=0.5):
     return bse
 
 
-def check_decorrelation(data, min_samples=10, corr_thresh=0):
+def check_decorrelation(data, min_samples=10, corr_thresh=0, plot=True, retval="ba_data"):
     '''
         Takes a data set, figures out the maximum allowable blocksize (totalsize / 10, or whatever other criteria the
         user specifies), then see if the sample actually decorrelates in that time. The basic indicator of convergence
@@ -101,16 +173,95 @@ def check_decorrelation(data, min_samples=10, corr_thresh=0):
         decorr_frame = np.argmax(acf_data < corr_thresh)
     else:
         decorr_frame = None
+    if plot:
+        f, axarr = plt.subplots(2, sharex=True)
 
-    f, axarr = plt.subplots(2, sharex=True)
+        axarr[0].set_ylabel('BSE')
+        axarr[0].plot(np.arange(1, ba_data.size + 1), ba_data)
+        if is_decorrelated:
+            axarr[0].plot([decorr_frame, decorr_frame], [ba_data.min(), ba_data.max()], 'k--')
 
-    axarr[0].set_ylabel('BSE')
-    axarr[0].plot(np.arange(1, ba_data.size + 1), ba_data)
-    if is_decorrelated:
-        axarr[0].plot([decorr_frame, decorr_frame], [ba_data.min(), ba_data.max()], 'k--')
+        axarr[1].set_ylabel('ACF')
+        axarr[1].set_xlabel('Block size (top) / tau (bot)')
+        axarr[1].plot(np.arange(acf_data.size), acf_data)   # nlags + 1, with lag=0
+        axarr[1].plot([0, max_block_size], [corr_thresh, corr_thresh])
+        plt.show()
 
-    axarr[1].set_ylabel('ACF')
-    axarr[1].set_xlabel('Block size (top) / tau (bot)')
-    axarr[1].plot(np.arange(acf_data.size), acf_data)   # nlags + 1, with lag=0
-    axarr[1].plot([0, max_block_size], [corr_thresh, corr_thresh])
-    plt.show()
+    if retval == "ba_data":
+        return ba_data
+    elif retval == "decorr_frame":
+        return decorr_frame
+    elif retval == "decorr_plot":
+        return acf_data
+
+def assess_equilibration(timeseries, minimum_fraction_of_series=0.2, minimum_effective_samples=10,
+                         crash_on_bad_series=False, plot=False):
+    '''
+        Determines whether a time series samples equilibrium, and whether the equilibrated portion of the time series
+        contains sufficient decorrelated samples. Wraps pymbar.timeseries.detectEquilibration
+
+        Parameters:
+            timeseries                 - 1D numpy array of data
+            minimum_fraction_of_series - the pymbar utility will determine the amount of data to toss from the beginning
+                                         of the simulation. If not equilibrated, it will only take the last few data
+                                         points, which is an artefact. If the selected data is below this fraction of
+                                         the total data, the function will report that we are not equilibrated
+            minimum_effective_samples  - the pymbar utility will report the number of decorrelated samples. Warn if
+                                         below this number
+            crash_on_bad_series        - if data series does not pass inspection, throw an error if true. Else just
+                                         warns by printing
+            plot                       - plots the equilibrium and nonequilibrium regions of the series if true
+        Returns
+            t0                         - initial frame to analyze reported from pymbar
+            num_effective_samples      - number of effective samples reported by pymbar
+
+            // TODO check that input is 1D
+    '''
+
+    t0, g, neff = detectEquilibration(timeseries)
+
+    is_good_series = True
+    fraction_of_sample_retained = (timeseries.size - t0) / timeseries.size
+    if fraction_of_sample_retained < minimum_fraction_of_series:
+        is_good_series = False
+        print("Warning - only {:2.1f}% of the data set is selected by pymbar".format(100 * fraction_of_sample_retained) +
+              "- usually a sign that you do not have an equilibrated sample")
+    # do elif to avoid extra messages
+    elif neff < minimum_effective_samples:
+        is_good_series = False
+        print("This data series has only {:d} effective samples, less than the {:d} sample minimum".format(int(neff), minimum_effective_samples))
+
+    if plot:
+        plt.figure()
+        plt.xlabel("series data point")
+        plt.ylabel("series value")
+        plt.plot(np.arange(t0),                  timeseries[:t0], "r", label="unequilibrated data")
+        plt.plot(np.arange(t0, timeseries.size), timeseries[t0:], "b", label="equilibrated data")
+        plt.show()
+
+    if crash_on_bad_series and not is_good_series:
+        raise Exception("Bad data series")
+
+    return t0, neff
+
+
+def analyze_group_of_time_series(timeseries_list, identifiers=None):
+    '''
+        Compile a bunch of analyses of a list of time series, from e.g. a set of PMF windows
+
+        Returns a dataQuality instance
+    '''
+    data_struct = Data_quality(timeseries_list, identifiers=identifiers)
+    data_struct.first_frames = []
+    data_struct.block_average_profiles = []
+    data_struct.n_samples_effective = []
+    data_struct.fract_of_series_used = []
+    for i in range(len(timeseries_list)):
+        data_struct.block_average_profiles.append(check_decorrelation(timeseries_list[i], plot=False))
+        t0, neff = assess_equilibration(timeseries_list[i])
+        series_len = len(timeseries_list[i])
+        fract_of_data_used = (series_len - t0) / series_len
+        data_struct.fract_of_series_used.append(fract_of_data_used)
+        data_struct.t0.append(t0)
+        data_struct.n_samples_effective.append(neff)
+    return data_struct

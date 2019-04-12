@@ -55,3 +55,6 @@ def dihedralFromPoints(p1, p2, p3, p4):
     v2 = p3 - p2
     v3 = p4 - p3
     return dihedralFromVectors(v1, v2, v3)
+
+
+print(__name__)
